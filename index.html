@@ -66,7 +66,6 @@
   }
   .btn:active { opacity: .6; }
   .btn:disabled { opacity: .5; cursor: default; }
-  .no-dl .btn { display: none; }
 
   .table-wrap { overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; font-size: .9375rem; }
@@ -109,13 +108,6 @@ const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 });
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
 const results = document.getElementById('results');
-
-let dl = null;
-async function initDownloads() {
-  try { dl = await window.claude.use('downloads'); } catch (e) { dl = null; }
-  document.documentElement.classList.toggle('no-dl', !dl);
-}
-initDownloads();
 
 ['dragover', 'dragleave', 'drop'].forEach(evt => {
   drop.addEventListener(evt, e => {
@@ -192,9 +184,9 @@ function renderCard(card, filename, out) {
 }
 
 async function downloadFile(btn, filename, out) {
-  if (!dl) return;
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Готовим…';
+  btn.disabled = true;
+  btn.textContent = 'Готовим…';
   try {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Отчёт');
@@ -203,18 +195,40 @@ async function downloadFile(btn, filename, out) {
     out.forEach(row => {
       const excelRow = ws.addRow(COLS.map(c => row[c]));
       if (shouldHighlight(row)) {
-        excelRow.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE79A' } }; });
+        excelRow.eachCell(cell => {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE79A' } };
+        });
       }
     });
     ws.getRow(1).font = { bold: true };
+
     const buffer = await wb.xlsx.writeBuffer();
-    await dl.save({ filename: filename.replace(/\.xls$/i, '.xlsx'), data: new Blob([buffer]) });
-    btn.textContent = 'Сохранено ✓';
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const safeName = filename.replace(/\.xlsx?$/i, '') + '.xlsx';
+    const url = URL.createObjectURL(blob);
+
+    // Обычная загрузка работает на опубликованном сайте, без API Claude.
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = safeName;
+    link.textContent = 'Если файл не скачался, нажми здесь, чтобы открыть и сохранить его';
+    link.style.cssText = 'display:block;margin:0 16px 14px;color:var(--accent);font-size:.9rem;word-break:break-word;';
+    btn.parentElement.parentElement.appendChild(link);
+    link.click();
+
+    btn.textContent = 'Скачать ещё раз';
+    // Не отзываем URL сразу: Safari на iPhone может обработать загрузку с задержкой.
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
   } catch (err) {
-    btn.textContent = err && err.code === 'declined' ? label : 'Не удалось';
+    console.error(err);
+    btn.textContent = 'Ошибка создания файла';
   } finally {
     btn.disabled = false;
-    setTimeout(() => { btn.textContent = label; }, 1600);
+    setTimeout(() => {
+      if (btn.isConnected) btn.textContent = label;
+    }, 2500);
   }
 }
 

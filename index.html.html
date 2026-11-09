@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Инвентаризация — Дашборд</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root {
+    --bg: #F2F2F7; --card: #FFFFFF; --text: #000000; --muted: #8A8A8E;
+    --sep: #E5E5EA; --fill: #F2F2F7; --accent: #007AFF; --accent-tint: rgba(0,122,255,.12);
+    --yellow: #FFF3BF; --yellow-edge: #FFCC00; --err: #FF3B30;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000000; --card: #1C1C1E; --text: #FFFFFF; --muted: #98989F;
+      --sep: #38383A; --fill: #2C2C2E; --accent: #0A84FF; --accent-tint: rgba(10,132,255,.22);
+      --yellow: rgba(255,214,10,.2); --yellow-edge: #FFD60A; --err: #FF453A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #000000; --card: #1C1C1E; --text: #FFFFFF; --muted: #98989F;
+    --sep: #38383A; --fill: #2C2C2E; --accent: #0A84FF; --accent-tint: rgba(10,132,255,.22);
+    --yellow: rgba(255,214,10,.2); --yellow-edge: #FFD60A; --err: #FF453A;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 56px; }
+  h1 { font-size: 2.125rem; font-weight: 700; letter-spacing: .01em; margin: 8px 0 6px; }
+  .sub { color: var(--muted); font-size: 1rem; line-height: 1.35; margin: 0 0 22px; }
+
+  .drop {
+    display: flex; align-items: center; gap: 14px; background: var(--card);
+    border-radius: 14px; padding: 14px 16px; cursor: pointer; transition: background .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .drop:active, .drop.drag { background: var(--accent-tint); }
+  .drop input { display: none; }
+  .drop-icon {
+    width: 40px; height: 40px; border-radius: 10px; background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center; flex: none;
+  }
+  .drop-text { flex: 1; min-width: 0; }
+  .drop-main { display: block; font-size: 1.0625rem; color: var(--accent); font-weight: 500; }
+  .drop-sub { display: block; font-size: .8125rem; color: var(--muted); margin-top: 2px; }
+  .chev { color: var(--muted); flex: none; opacity: .6; }
+
+  .card { background: var(--card); border-radius: 14px; margin-top: 20px; overflow: hidden; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+  .card-info { min-width: 0; }
+  .file-name { font-size: 1.0625rem; font-weight: 600; word-break: break-word; }
+  .meta { color: var(--muted); font-size: .8125rem; margin-top: 3px; }
+  .err { color: var(--err); font-size: .875rem; margin-top: 4px; }
+  .btn {
+    flex: none; background: var(--accent); color: #fff; border: 0; border-radius: 999px;
+    font: inherit; font-size: .9375rem; font-weight: 600; padding: 8px 18px; min-height: 36px;
+    cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+  }
+  .btn:active { opacity: .6; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .no-dl .btn { display: none; }
+
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .9375rem; }
+  th {
+    background: var(--fill); color: var(--muted); font-size: .75rem; font-weight: 600;
+    text-align: left; padding: 8px 14px; white-space: nowrap;
+  }
+  td { padding: 11px 14px; border-top: 1px solid var(--sep); }
+  td:first-child, th:first-child { min-width: 150px; padding-left: 16px; }
+  td:nth-child(n+2), th:nth-child(n+2) { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.hl td { background: var(--yellow); }
+  tr.hl td:first-child { box-shadow: inset 4px 0 0 var(--yellow-edge); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <h1>Инвентаризация</h1>
+  <p class="sub">Загрузи Excel-выгрузку — получишь сводку из 4 колонок с подсветкой расхождений. Файлы обрабатываются прямо в браузере и никуда не отправляются.</p>
+
+  <label class="drop" id="drop">
+    <span class="drop-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+    </span>
+    <span class="drop-text">
+      <span class="drop-main">Выбрать файлы</span>
+      <span class="drop-sub">.xlsx, можно сразу несколько</span>
+    </span>
+    <svg class="chev" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1 1 6 6-6 6"/></svg>
+    <input type="file" id="fileInput" accept=".xlsx" multiple>
+  </label>
+
+  <div id="results"></div>
+</main>
+
+<script>
+const COLS = ["Наименование", "План. остаток", "Факт. остаток", "Разница"];
+const THRESHOLD = 0.5;
+const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 });
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const results = document.getElementById('results');
+
+let dl = null;
+async function initDownloads() {
+  try { dl = await window.claude.use('downloads'); } catch (e) { dl = null; }
+  document.documentElement.classList.toggle('no-dl', !dl);
+}
+initDownloads();
+
+['dragover', 'dragleave', 'drop'].forEach(evt => {
+  drop.addEventListener(evt, e => {
+    e.preventDefault();
+    drop.classList.toggle('drag', evt === 'dragover');
+    if (evt === 'drop') handleFiles(e.dataTransfer.files);
+  });
+});
+fileInput.addEventListener('change', e => { handleFiles(e.target.files); fileInput.value = ''; });
+
+function handleFiles(fileList) { Array.from(fileList).forEach(processFile); }
+
+function fmt(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') { const r = Math.round(v * 1000) / 1000; return r === 0 ? '0' : nf.format(r); }
+  return String(v);
+}
+
+function shouldHighlight(row) {
+  const name = String(row["Наименование"] ?? "");
+  if (name.startsWith("Пак")) return false;
+  const diff = parseFloat(row["Разница"]);
+  return !isNaN(diff) && Math.abs(diff) >= THRESHOLD;
+}
+
+function errorCard(card, name, msg) {
+  card.innerHTML = `<div class="card-head"><div class="card-info"><div class="file-name">${escapeHtml(name)}</div><div class="err">${escapeHtml(msg)}</div></div></div>`;
+}
+
+async function processFile(file) {
+  const card = document.createElement('section');
+  card.className = 'card';
+  card.innerHTML = `<div class="card-head"><div class="card-info"><div class="file-name">${escapeHtml(file.name)}</div><div class="meta">Обработка…</div></div></div>`;
+  results.prepend(card);
+
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(await file.arrayBuffer());
+    const ws = wb.worksheets[0];
+
+    const headerMap = {};
+    ws.getRow(1).eachCell((cell, col) => { headerMap[String(cell.value).trim()] = col; });
+    const missing = COLS.filter(c => !(c in headerMap));
+    if (missing.length) { errorCard(card, file.name, 'Не найдены колонки: ' + missing.join(', ')); return; }
+
+    const out = [];
+    for (let r = 2; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      const vals = COLS.map(c => row.getCell(headerMap[c]).value);
+      if (vals.every(v => v === null || v === undefined || v === '')) continue;
+      out.push(Object.fromEntries(COLS.map((c, i) => [c, vals[i]])));
+    }
+    renderCard(card, file.name, out);
+  } catch (err) {
+    errorCard(card, file.name, 'Ошибка чтения файла: ' + err.message);
+  }
+}
+
+function renderCard(card, filename, out) {
+  const highlighted = out.filter(shouldHighlight).length;
+  const body = out.map(row =>
+    `<tr class="${shouldHighlight(row) ? 'hl' : ''}">` + COLS.map(c => `<td>${escapeHtml(fmt(row[c]))}</td>`).join('') + '</tr>'
+  ).join('');
+  card.innerHTML = `
+    <div class="card-head">
+      <div class="card-info">
+        <div class="file-name">${escapeHtml(filename)}</div>
+        <div class="meta">Строк: ${out.length} · с расхождением ≥ ${fmt(THRESHOLD)}: ${highlighted}</div>
+      </div>
+      <button class="btn" type="button">Скачать</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr>${COLS.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+  card.querySelector('.btn').addEventListener('click', e => downloadFile(e.currentTarget, filename, out));
+}
+
+async function downloadFile(btn, filename, out) {
+  if (!dl) return;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Готовим…';
+  try {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Отчёт');
+    ws.addRow(COLS);
+    ws.columns = [{ width: 34 }, { width: 16 }, { width: 16 }, { width: 12 }];
+    out.forEach(row => {
+      const excelRow = ws.addRow(COLS.map(c => row[c]));
+      if (shouldHighlight(row)) {
+        excelRow.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE79A' } }; });
+      }
+    });
+    ws.getRow(1).font = { bold: true };
+    const buffer = await wb.xlsx.writeBuffer();
+    await dl.save({ filename: filename.replace(/\.xls$/i, '.xlsx'), data: new Blob([buffer]) });
+    btn.textContent = 'Сохранено ✓';
+  } catch (err) {
+    btn.textContent = err && err.code === 'declined' ? label : 'Не удалось';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = label; }, 1600);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+}
+</script>
+</body>
+</html>

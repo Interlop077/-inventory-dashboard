@@ -44,6 +44,12 @@
   }
   .drop:active, .drop.drag { background: var(--accent-tint); }
   .drop input { display: none; }
+  .toolbar { display: flex; justify-content: flex-end; margin-top: 10px; }
+  .clear-btn {
+    border: 0; background: transparent; color: var(--accent); font: inherit;
+    font-size: .9rem; font-weight: 600; padding: 8px 4px; cursor: pointer;
+  }
+  .clear-btn:active { opacity: .55; }
   .drop-icon {
     width: 40px; height: 40px; border-radius: 10px; background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center; flex: none;
@@ -96,6 +102,9 @@
     <svg class="chev" width="8" height="14" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m1 1 6 6-6 6"/></svg>
     <input type="file" id="fileInput" accept=".xlsx" multiple>
   </label>
+  <div class="toolbar">
+    <button class="clear-btn" id="clearResults" type="button">Очистить список</button>
+  </div>
 
   <div id="results"></div>
 </main>
@@ -108,6 +117,12 @@ const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 });
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
 const results = document.getElementById('results');
+const clearResults = document.getElementById('clearResults');
+
+clearResults.addEventListener('click', () => {
+  results.replaceChildren();
+  fileInput.value = '';
+});
 
 ['dragover', 'dragleave', 'drop'].forEach(evt => {
   drop.addEventListener(evt, e => {
@@ -201,15 +216,12 @@ async function downloadFile(btn, filename, out) {
       }
     });
     ws.getRow(1).font = { bold: true };
-
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     });
     const safeName = filename.replace(/\.xlsx?$/i, '') + '.xlsx';
     const url = URL.createObjectURL(blob);
-
-    // Обычная загрузка работает на опубликованном сайте, без API Claude.
     const link = document.createElement('a');
     link.href = url;
     link.download = safeName;
@@ -217,18 +229,14 @@ async function downloadFile(btn, filename, out) {
     link.style.cssText = 'display:block;margin:0 16px 14px;color:var(--accent);font-size:.9rem;word-break:break-word;';
     btn.parentElement.parentElement.appendChild(link);
     link.click();
-
     btn.textContent = 'Скачать ещё раз';
-    // Не отзываем URL сразу: Safari на iPhone может обработать загрузку с задержкой.
     setTimeout(() => URL.revokeObjectURL(url), 120000);
   } catch (err) {
     console.error(err);
     btn.textContent = 'Ошибка создания файла';
   } finally {
     btn.disabled = false;
-    setTimeout(() => {
-      if (btn.isConnected) btn.textContent = label;
-    }, 2500);
+    setTimeout(() => { if (btn.isConnected) btn.textContent = label; }, 2500);
   }
 }
 

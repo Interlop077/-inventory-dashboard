@@ -5,7 +5,7 @@
   'use strict';
 
   // === НАСТРОЙКА: адрес backend. Для смены backend меняется только эта строка. ===
-  const BACKEND_URL = 'https://ВАШ-СЕРВИС.onrender.com';
+  const BACKEND_URL = 'https://poster-backend-2ztd.onrender.com/';
   // =============================================================================
   const API = '/api/v1';
   const PW_KEY = 'poster_admin_pw';

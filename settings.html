@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Заведения — Poster</title>
+<style>
+  :root {
+    --bg: #F2F2F7; --card: #FFFFFF; --text: #000000; --muted: #8A8A8E;
+    --sep: #E5E5EA; --fill: #F2F2F7; --accent: #007AFF; --accent-tint: rgba(0,122,255,.12);
+    --ok: #1E8E3E; --err: #FF3B30;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000000; --card: #1C1C1E; --text: #FFFFFF; --muted: #98989F;
+      --sep: #38383A; --fill: #2C2C2E; --accent: #0A84FF; --accent-tint: rgba(10,132,255,.22);
+      --ok: #30D158; --err: #FF453A;
+    }
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 56px; }
+  .back { color: var(--accent); text-decoration: none; font-size: 1rem; }
+  h1 { font-size: 2.125rem; font-weight: 700; margin: 8px 0 6px; }
+  .sub { color: var(--muted); font-size: 1rem; line-height: 1.35; margin: 0 0 22px; }
+  .card { background: var(--card); border-radius: 14px; margin-top: 16px; overflow: hidden; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+  .card-info { min-width: 0; }
+  .file-name { font-size: 1.0625rem; font-weight: 600; word-break: break-word; }
+  .meta { color: var(--muted); font-size: .8125rem; margin-top: 3px; word-break: break-word; }
+  .meta.ok { color: var(--ok); } .meta.bad { color: var(--err); }
+  .body { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .body label { font-size: .8125rem; color: var(--muted); margin-top: 4px; }
+  .body input {
+    width: 100%; font: inherit; font-size: 1rem; color: var(--text); background: var(--fill);
+    border: 0; border-radius: 10px; padding: 10px 12px; min-height: 44px;
+  }
+  .body details { margin-top: 6px; } .body summary { color: var(--accent); font-size: .875rem; cursor: pointer; padding: 6px 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 14px; }
+  .body .actions { padding: 6px 0 0; }
+  .btn {
+    border: 0; border-radius: 999px; font: inherit; font-size: .9375rem; font-weight: 600;
+    padding: 8px 16px; min-height: 36px; cursor: pointer; background: var(--accent); color: #fff;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn.sec { background: var(--accent-tint); color: var(--accent); }
+  .btn.danger { background: transparent; color: var(--err); }
+  .btn:active { opacity: .6; } .btn:disabled { opacity: .5; cursor: default; }
+  .link { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: .9rem; font-weight: 600; padding: 8px 4px; cursor: pointer; }
+  .msg { color: var(--muted); font-size: .875rem; margin-top: 12px; }
+  .err { color: var(--err); font-size: .875rem; margin-top: 12px; word-break: break-word; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <a class="back" href="index.html">‹ Dashboard</a>
+  <h1>Заведения</h1>
+  <p class="sub">Точки, подключённые к Poster. Токены хранятся на сервере в зашифрованном виде и здесь не показываются.</p>
+  <div id="app"></div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  const API = '/api/v1', PW_KEY = 'poster_admin_pw', URL_KEY = 'poster_backend_url', TIMEOUT_MS = 90000;
+  const app = document.getElementById('app');
+  const esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  };
+  function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lsSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+
+  let pw = lsGet(PW_KEY), backend = lsGet(URL_KEY), venues = [];
+  const st = { connected: false, busy: false, msg: '', err: '', edit: null, draft: null, storages: [], results: {},
+               cUrl: backend, cPw: pw };
+
+  async function api(method, path, body) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function () { ctrl.abort(); }, TIMEOUT_MS);
+    let res;
+    try {
+      const headers = { 'X-Admin-Password': pw };
+      if (body !== undefined) headers['Content-Type'] = 'application/json';
+      res = await fetch(backend.replace(/\/+$/, '') + API + path, {
+        method: method, headers: headers, signal: ctrl.signal,
+        body: body !== undefined ? JSON.stringify(body) : undefined
+      });
+    } catch (e) {
+      throw {
+        code: 'NETWORK',
+        message: e && e.name === 'AbortError'
+          ? 'Сервер не ответил за 90 секунд. Повторите попытку.'
+          : 'Нет связи с сервером. Проверьте адрес сервера и интернет (бесплатный сервер просыпается до минуты), ' +
+            'а также что адрес сайта указан в ALLOWED_ORIGINS на сервере.'
+      };
+    } finally { clearTimeout(timer); }
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* не JSON */ }
+    if (!res.ok) {
+      const err = (data && data.error) || { code: 'HTTP_' + res.status, message: 'Ошибка сервера (' + res.status + ')' };
+      if (err.code === 'UNAUTHORIZED') { pw = ''; lsSet(PW_KEY, ''); }
+      throw err;
+    }
+    return data;
+  }
+
+  function fail(e) {
+    const code = e && e.code ? e.code : '';
+    st.err = (e && e.message ? e.message : 'Неизвестная ошибка') + (code && code !== 'NETWORK' ? ' [' + code + ']' : '');
+    if (code === 'UNAUTHORIZED') st.connected = false;
+  }
+  function dis(c) { return c ? ' disabled' : ''; }
+  function note() {
+    return (st.msg ? '<div class="msg">' + esc(st.msg) + '</div>' : '') + (st.err ? '<div class="err">' + esc(st.err) + '</div>' : '');
+  }
+
+  function venueCard(v) {
+    const r = st.results[v.id];
+    return '<section class="card"><div class="card-head"><div class="card-info"><div class="file-name">' + esc(v.name) + '</div>' +
+      '<div class="meta">Склад №' + esc(v.storage_id) + ' · токен сохранён</div>' +
+      (r ? '<div class="meta ' + (r.ok ? 'ok' : 'bad') + '">' + esc(r.text) + '</div>' : '') + '</div></div>' +
+      '<div class="actions">' +
+      '<button class="btn sec" data-act="test" data-id="' + esc(v.id) + '"' + dis(st.busy) + '>Проверить</button>' +
+      '<button class="btn sec" data-act="edit" data-id="' + esc(v.id) + '"' + dis(st.busy) + '>Изменить</button>' +
+      '<button class="btn danger" data-act="del" data-id="' + esc(v.id) + '"' + dis(st.busy) + '>Удалить</button>' +
+      '</div></section>';
+  }
+
+  function formCard() {
+    const d = st.draft, isNew = st.edit === 'new';
+    const chips = st.storages.map(function (s) {
+      return '<button class="btn sec" type="button" data-act="pick" data-sid="' + esc(s.id) + '">№' + esc(s.id) + ' ' + esc(s.name) + '</button>';
+    }).join('');
+    return '<section class="card"><div class="card-head"><div class="card-info"><div class="file-name">' +
+      (isNew ? 'Новое заведение' : 'Изменить заведение') + '</div></div></div><div class="body">' +
+      '<label for="fName">Название (попадёт в имя Excel-файла)</label>' +
+      '<input id="fName" value="' + esc(d.name) + '" autocomplete="off"' + dis(st.busy) + '>' +
+      '<label for="fToken">Токен Poster' + (isNew ? '' : ' (оставьте пустым, чтобы не менять)') + '</label>' +
+      '<input id="fToken" type="password" value="' + esc(d.token) + '" autocomplete="off" autocapitalize="off"' + dis(st.busy) + '>' +
+      '<label for="fSid">Номер склада (storage_id)</label>' +
+      '<input id="fSid" value="' + esc(d.sid) + '" inputmode="numeric" autocomplete="off"' + dis(st.busy) + '>' +
+      (isNew ? '<div class="meta">Номер склада можно найти после добавления: «Изменить» → «Найти склады».</div>'
+             : '<div class="actions"><button class="btn sec" type="button" data-act="storages"' + dis(st.busy) + '>Найти склады</button></div>' +
+               (chips ? '<div class="chips">' + chips + '</div>' : '')) +
+      '<details' + (d.base ? ' open' : '') + '><summary>Дополнительно</summary>' +
+      '<label for="fBase">Адрес API Poster (обычно не нужен)</label>' +
+      '<input id="fBase" value="' + esc(d.base) + '" placeholder="https://аккаунт.joinposter.com/api" autocomplete="off"' + dis(st.busy) + '></details>' +
+      '<div class="actions"><button class="btn" type="button" data-act="save"' + dis(st.busy) + '>Сохранить</button>' +
+      '<button class="btn sec" type="button" data-act="cancel"' + dis(st.busy) + '>Отмена</button></div></div></section>';
+  }
+
+  function render() {
+    let html;
+    if (!st.connected) {
+      html = '<section class="card"><div class="card-head"><div class="card-info"><div class="file-name">Подключение к серверу</div>' +
+        '<div class="meta">Адрес сервера и пароль администратора</div></div></div><div class="body">' +
+        '<label for="cUrl">Адрес сервера</label>' +
+        '<input id="cUrl" value="' + esc(st.cUrl) + '" placeholder="https://имя.onrender.com" autocomplete="off" autocapitalize="off"' + dis(st.busy) + '>' +
+        '<label for="cPw">Пароль администратора</label>' +
+        '<input id="cPw" type="password" value="' + esc(st.cPw) + '" autocomplete="current-password" autocapitalize="off"' + dis(st.busy) + '>' +
+        '<div class="actions"><button class="btn" data-act="connect"' + dis(st.busy) + '>Подключиться</button></div>' + note() + '</div></section>';
+    } else {
+      html = '<div class="card"><div class="card-head"><div class="card-info"><div class="meta">Сервер: ' + esc(backend.replace(/^https?:\/\//, '')) +
+        '</div></div><button class="link" data-act="logout">Выйти</button></div></div>' +
+        (venues.length ? venues.map(venueCard).join('') : '<div class="msg">Заведения ещё не добавлены.</div>') +
+        (st.edit ? formCard() : '<div class="actions" style="padding:16px 0 0"><button class="btn" data-act="new"' + dis(st.busy) + '>Добавить заведение</button></div>') +
+        note();
+    }
+    app.innerHTML = html;
+  }
+
+  async function connect() {
+    const url = st.cUrl.trim().replace(/\/+$/, '');
+    pw = st.cPw.trim();
+    if (!/^https:\/\//i.test(url)) { st.err = 'Адрес сервера должен начинаться с https://'; st.msg = ''; render(); return; }
+    if (!pw) { st.err = 'Введите пароль администратора'; st.msg = ''; render(); return; }
+    backend = url;
+    st.busy = true; st.msg = 'Подключаюсь к серверу…'; st.err = ''; render();
+    try {
+      venues = await api('GET', '/venues');
+      lsSet(URL_KEY, backend); lsSet(PW_KEY, pw);
+      st.connected = true; st.msg = '';
+    } catch (e) { fail(e); st.msg = ''; }
+    st.busy = false; render();
+  }
+
+  async function run(fn) {
+    st.busy = true; st.err = ''; render();
+    try { await fn(); } catch (e) { fail(e); }
+    st.busy = false; render();
+  }
+
+  function venueById(id) { return venues.filter(function (v) { return String(v.id) === String(id); })[0]; }
+
+  async function save() {
+    const d = st.draft, name = d.name.trim(), sid = String(d.sid).trim(), token = d.token.trim(), base = d.base.trim();
+    if (!name || !sid) { st.err = 'Укажите название и номер склада'; st.msg = ''; render(); return; }
+    if (st.edit === 'new' && !token) { st.err = 'Укажите токен Poster'; st.msg = ''; render(); return; }
+    await run(async function () {
+      if (st.edit === 'new') {
+        const body = { name: name, token: token, storage_id: sid };
+        if (base) body.api_base = base;
+        await api('POST', '/venues', body);
+        st.msg = 'Заведение добавлено. Нажмите «Проверить», чтобы убедиться, что подключение работает.';
+      } else {
+        const body = { name: name, storage_id: sid, api_base: base };
+        if (token) body.token = token;
+        await api('PUT', '/venues/' + st.edit, body);
+        st.msg = 'Изменения сохранены.';
+        delete st.results[st.edit];
+      }
+      venues = await api('GET', '/venues');
+      st.edit = null; st.draft = null; st.storages = [];
+    });
+  }
+
+  app.addEventListener('input', function (e) {
+    const id = e.target.id, v = e.target.value;
+    if (id === 'cUrl') st.cUrl = v; else if (id === 'cPw') st.cPw = v;
+    else if (st.draft) {
+      if (id === 'fName') st.draft.name = v; else if (id === 'fToken') st.draft.token = v;
+      else if (id === 'fSid') st.draft.sid = v; else if (id === 'fBase') st.draft.base = v;
+    }
+  });
+  app.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !st.connected && (e.target.id === 'cUrl' || e.target.id === 'cPw')) connect();
+  });
+
+  app.addEventListener('click', function (e) {
+    const b = e.target.closest('[data-act]');
+    if (!b || st.busy) return;
+    const act = b.dataset.act, id = b.dataset.id;
+    st.msg = ''; st.err = '';
+    if (act === 'connect') { connect(); }
+    else if (act === 'logout') {
+      pw = ''; lsSet(PW_KEY, ''); st.connected = false; st.cPw = ''; venues = []; st.edit = null; st.draft = null; render();
+    }
+    else if (act === 'new') { st.edit = 'new'; st.draft = { name: '', token: '', sid: '', base: '' }; st.storages = []; render(); }
+    else if (act === 'edit') {
+      const v = venueById(id); if (!v) return;
+      st.edit = String(v.id); st.draft = { name: v.name, token: '', sid: v.storage_id, base: v.api_base || '' }; st.storages = []; render();
+    }
+    else if (act === 'cancel') { st.edit = null; st.draft = null; st.storages = []; render(); }
+    else if (act === 'save') { save(); }
+    else if (act === 'pick') { st.draft.sid = b.dataset.sid; render(); }
+    else if (act === 'storages') {
+      run(async function () {
+        const data = await api('GET', '/venues/' + st.edit + '/storages');
+        const list = (data && Array.isArray(data.response)) ? data.response : [];
+        st.storages = list.filter(function (s) { return String(s.delete) !== '1'; })
+          .map(function (s) { return { id: String(s.storage_id), name: s.storage_name || '' }; });
+        if (!st.storages.length) st.msg = 'Склады не найдены.';
+      });
+    }
+    else if (act === 'test') {
+      run(async function () {
+        try {
+          const r = await api('POST', '/venues/' + id + '/test');
+          st.results[id] = { ok: true, text: 'Подключение работает. Проведённых инвентаризаций: ' + r.posted + ' (всего ' + r.inventories_total + ').' };
+        } catch (err) {
+          if (err && err.code === 'UNAUTHORIZED') throw err;
+          st.results[id] = { ok: false, text: ((err && err.message) || 'Ошибка') + (err && err.code && err.code !== 'NETWORK' ? ' [' + err.code + ']' : '') };
+        }
+      });
+    }
+    else if (act === 'del') {
+      const v = venueById(id); if (!v) return;
+      if (!window.confirm('Удалить заведение «' + v.name + '»? Токен будет удалён с сервера.')) return;
+      run(async function () {
+        await api('DELETE', '/venues/' + id);
+        venues = await api('GET', '/venues');
+        delete st.results[id];
+        st.msg = 'Заведение удалено.';
+      });
+    }
+  });
+
+  render();
+  if (backend && pw) connect();
+})();
+</script>
+</body>
+</html>

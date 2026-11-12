@@ -1,0 +1,17 @@
+/* Poster: дополнительный источник. Использует переменные цветов Dashboard. */
+.poster-body { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+.poster-body label { font-size: .8125rem; color: var(--muted); margin-top: 4px; }
+.poster-body select, .poster-body input {
+  width: 100%; font: inherit; font-size: 1rem; color: var(--text); background: var(--fill);
+  border: 0; border-radius: 10px; padding: 10px 12px; min-height: 44px;
+}
+.poster-body select:disabled, .poster-body input:disabled { opacity: .5; }
+.poster-actions { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+.poster-link {
+  flex: none; border: 0; background: transparent; color: var(--accent); font: inherit;
+  font-size: .9rem; font-weight: 600; padding: 8px 4px; cursor: pointer;
+}
+.poster-link:active { opacity: .55; }
+.poster-msg { color: var(--muted); font-size: .875rem; }
+.poster-err { color: var(--err); font-size: .875rem; word-break: break-word; }
+.poster-warn { color: var(--muted); font-size: .8125rem; padding: 0 16px 12px; }

@@ -85,6 +85,7 @@
   tr.hl td { background: var(--yellow); }
   tr.hl td:first-child { box-shadow: inset 4px 0 0 var(--yellow-edge); }
 </style>
+<link rel="stylesheet" href="poster.css">
 </head>
 <body>
 <main class="wrap">
@@ -105,6 +106,8 @@
   <div class="toolbar">
     <button class="clear-btn" id="clearResults" type="button">Очистить список</button>
   </div>
+
+  <div id="poster-source"></div>
 
   <div id="results"></div>
 </main>
@@ -244,5 +247,6 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 }
 </script>
+<script src="poster.js"></script>
 </body>
 </html>

@@ -15,3 +15,4 @@
 .poster-msg { color: var(--muted); font-size: .875rem; }
 .poster-err { color: var(--err); font-size: .875rem; word-break: break-word; }
 .poster-warn { color: var(--muted); font-size: .8125rem; padding: 0 16px 12px; }
+a.poster-link { text-decoration: none; display: inline-block; }

@@ -1,34 +1,35 @@
 /* Poster: дополнительный источник данных для Dashboard.
    Код Dashboard не изменяется. Нужны: элемент #poster-source и глобальная функция
-   renderCard(card, filename, rows) из index.html. Ручная загрузка Excel работает как раньше. */
+   renderCard(card, filename, rows) из index.html. Ручная загрузка Excel работает как раньше.
+   Адрес сервера и пароль вводятся на экране входа и запоминаются в браузере: файл править не нужно. */
 (function () {
   'use strict';
 
-  // === НАСТРОЙКА: адрес backend. Для смены backend меняется только эта строка. ===
-  const BACKEND_URL = 'https://poster-backend-2ztd.onrender.com/';
-  // =============================================================================
+  // Необязательно: адрес сервера по умолчанию (иначе вводится на экране входа).
+  // Для смены backend достаточно ввести новый адрес на экране входа.
+  const DEFAULT_BACKEND_URL = '';
+
   const API = '/api/v1';
   const PW_KEY = 'poster_admin_pw';
+  const URL_KEY = 'poster_backend_url';
   const TIMEOUT_MS = 90000; // бесплатный сервер может просыпаться около минуты
 
   const mount = document.getElementById('poster-source');
   if (!mount) return;
-  const base = BACKEND_URL.replace(/\/+$/, '');
 
   const esc = function (s) {
     return String(s).replace(/[&<>"']/g, function (m) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
     });
   };
+  function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lsSet(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) { /* ignore */ } }
 
   const state = { step: 'login', busy: false, msg: '', err: '', venueId: '', invId: '' };
-  let password = '';
+  let password = lsGet(PW_KEY);
+  let base = (lsGet(URL_KEY) || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
   let venues = [];
   let inventories = [];
-  try { password = localStorage.getItem(PW_KEY) || ''; } catch (e) { /* хранилище недоступно */ }
-  function storePw(v) {
-    try { if (v) localStorage.setItem(PW_KEY, v); else localStorage.removeItem(PW_KEY); } catch (e) { /* ignore */ }
-  }
 
   async function api(path) {
     const ctrl = new AbortController();
@@ -41,7 +42,7 @@
         code: 'NETWORK',
         message: e && e.name === 'AbortError'
           ? 'Сервер не ответил за 90 секунд. Повторите попытку.'
-          : 'Нет связи с сервером. Проверьте интернет (бесплатный сервер просыпается до минуты) ' +
+          : 'Нет связи с сервером. Проверьте адрес сервера и интернет (бесплатный сервер просыпается до минуты) ' +
             'и что адрес сайта указан в ALLOWED_ORIGINS на сервере.'
       };
     } finally {
@@ -51,7 +52,7 @@
     try { data = await res.json(); } catch (e) { /* не JSON */ }
     if (!res.ok) {
       const err = (data && data.error) || { code: 'HTTP_' + res.status, message: 'Ошибка сервера (' + res.status + ')' };
-      if (err.code === 'UNAUTHORIZED') { password = ''; storePw(''); }
+      if (err.code === 'UNAUTHORIZED') { password = ''; lsSet(PW_KEY, ''); }
       throw err;
     }
     return data;
@@ -75,10 +76,14 @@
     if (state.step === 'login') {
       html =
         '<div class="card-head"><div class="card-info"><div class="file-name">Poster</div>' +
-        '<div class="meta">Инвентаризации напрямую из Poster. Введите пароль администратора.</div></div></div>' +
+        '<div class="meta">Инвентаризации напрямую из Poster. Введите адрес сервера и пароль администратора.</div></div></div>' +
         '<div class="poster-body">' +
-        '<input type="password" id="pPw" placeholder="Пароль администратора" autocomplete="current-password" ' +
-        'autocapitalize="off" value="' + esc(password) + '"' + dis(state.busy) + '>' +
+        '<label for="pUrl">Адрес сервера</label>' +
+        '<input type="url" id="pUrl" placeholder="https://имя.onrender.com" autocomplete="off" autocapitalize="off" ' +
+        'value="' + esc(base) + '"' + dis(state.busy) + '>' +
+        '<label for="pPw">Пароль администратора</label>' +
+        '<input type="password" id="pPw" autocomplete="current-password" autocapitalize="off" ' +
+        'value="' + esc(password) + '"' + dis(state.busy) + '>' +
         '<div class="poster-actions"><button class="btn" id="pLogin" type="button"' + dis(state.busy) + '>Войти</button></div>' +
         tail() + '</div>';
     } else {
@@ -92,7 +97,8 @@
       html =
         '<div class="card-head"><div class="card-info"><div class="file-name">Poster</div>' +
         '<div class="meta">Выберите заведение и дату инвентаризации</div></div>' +
-        '<button class="poster-link" id="pLogout" type="button">Выйти</button></div>' +
+        '<div><a class="poster-link" href="settings.html">Заведения</a>' +
+        '<button class="poster-link" id="pLogout" type="button">Выйти</button></div></div>' +
         '<div class="poster-body">' +
         '<label for="pVenue">Заведение</label>' +
         '<select id="pVenue"' + dis(state.busy || !venues.length) + '><option value="">Выберите…</option>' + venueOpts + '</select>' +
@@ -109,7 +115,9 @@
     const q = function (id) { return mount.querySelector('#' + id); };
     if (state.step === 'login') {
       q('pLogin').addEventListener('click', onLogin);
-      q('pPw').addEventListener('keydown', function (e) { if (e.key === 'Enter') onLogin(); });
+      const enterKey = function (e) { if (e.key === 'Enter') onLogin(); };
+      q('pUrl').addEventListener('keydown', enterKey);
+      q('pPw').addEventListener('keydown', enterKey);
     } else {
       q('pLogout').addEventListener('click', onLogout);
       q('pVenue').addEventListener('change', onVenue);
@@ -122,22 +130,27 @@
     state.busy = true; state.msg = 'Подключаюсь к серверу…'; state.err = ''; render();
     try {
       venues = await api('/venues');
-      storePw(password);
+      lsSet(URL_KEY, base); lsSet(PW_KEY, password);
       state.step = 'ready';
-      state.msg = venues.length ? '' : 'Заведения не добавлены. Добавьте их на странице /docs сервера.';
+      state.msg = venues.length ? '' : 'Заведения не добавлены. Добавьте их на странице «Заведения».';
     } catch (e) { fail(e); state.msg = ''; }
     state.busy = false; render();
   }
 
   function onLogin() {
-    const el = mount.querySelector('#pPw');
-    password = (el ? el.value : '').trim();
-    if (!password) return;
+    const urlEl = mount.querySelector('#pUrl');
+    const pwEl = mount.querySelector('#pPw');
+    base = (urlEl ? urlEl.value : '').trim().replace(/\/+$/, '');
+    password = (pwEl ? pwEl.value : '').trim();
+    if (!/^https:\/\//i.test(base)) {
+      state.err = 'Адрес сервера должен начинаться с https://'; state.msg = ''; render(); return;
+    }
+    if (!password) { state.err = 'Введите пароль администратора'; state.msg = ''; render(); return; }
     enter();
   }
 
   function onLogout() {
-    password = ''; storePw(''); venues = []; inventories = [];
+    password = ''; lsSet(PW_KEY, ''); venues = []; inventories = [];
     state.step = 'login'; state.venueId = ''; state.invId = ''; state.msg = ''; state.err = '';
     render();
   }
@@ -185,11 +198,8 @@
   }
 
   render();
-  if (BACKEND_URL.indexOf('ВАШ-СЕРВИС') !== -1) {
-    state.err = 'Не задан адрес сервера: откройте poster.js и впишите BACKEND_URL.';
-    render();
-    return;
+  if (base) {
+    try { fetch(base + '/health', { mode: 'no-cors' }).catch(function () {}); } catch (e) { /* прогрев сервера */ }
+    if (password) enter();
   }
-  try { fetch(base + '/health', { mode: 'no-cors' }).catch(function () {}); } catch (e) { /* прогрев сервера */ }
-  if (password) enter();
 })();
